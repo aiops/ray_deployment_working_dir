@@ -115,13 +115,15 @@ def build_app(cli_args: Dict[str, str]) -> serve.Application:
 
     tp = engine_args.tensor_parallel_size
     logger.info(f"Tensor parallelism = {tp}")
-    # pg_resources = []
-    # pg_resources.append({"CPU": 1})  # for the deployment replica
-    # for i in range(tp):
-    #     pg_resources.append({"CPU": 1, "GPU": 1})  # for the vLLM actors
+    pg_resources = []
+    pg_resources.append({"CPU": 1.0})  # for the deployment replica
+    cpu_per_actor = float(os.environ["CPU_PER_ACTOR"])
+    gpu_per_actor = float(os.environ["GPU_PER_ACTOR"])
+    for _ in range(tp):
+        pg_resources.append({"CPU": cpu_per_actor, "GPU": gpu_per_actor})  # for the vLLM actors
 
     return VLLMDeployment.options(
-        # placement_group_bundles=pg_resources,
+        placement_group_bundles=pg_resources,
         placement_group_strategy=os.environ['PLACEMENT_GROUP_STRATEGY']
     ).bind(
         engine_args,
