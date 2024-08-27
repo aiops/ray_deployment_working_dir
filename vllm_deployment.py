@@ -90,7 +90,8 @@ def parse_vllm_args(cli_args: Dict[str, str]):
     parser = make_arg_parser()
     arg_strings = []
     for key, value in cli_args.items():
-        arg_strings.extend([f"--{key}", str(value)])
+        if value is not None:
+            arg_strings.extend([f"--{key}", str(value)])
     logger.info(arg_strings)
     parsed_args = parser.parse_args(args=arg_strings)
     return parsed_args
@@ -130,5 +131,6 @@ def build_app(cli_args: Dict[str, str]) -> serve.Application:
 
 model = build_app({
     "model": os.environ['MODEL_ID'],
-    "tensor-parallel-size": os.environ['TENSOR_PARALLELISM']
+    "tensor-parallel-size": os.environ['TENSOR_PARALLELISM'],
+    "chat-template": os.environ.get('TOKENIZER_CHAT_TEMPLATE', None)
 })
