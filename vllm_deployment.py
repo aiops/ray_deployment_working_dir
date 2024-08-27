@@ -64,8 +64,8 @@ class VLLMDeployment:
                 model_config,
                 served_model_names,
                 self.response_role,
-                self.lora_modules,
-                self.chat_template,
+                lora_modules=self.lora_modules,
+                chat_template=self.chat_template,
             )
         logger.info(f"Request: {request}")
         generator = await self.openai_serving_chat.create_chat_completion(
