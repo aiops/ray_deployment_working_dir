@@ -125,7 +125,7 @@ def build_app(cli_args: Dict[str, str]) -> serve.Application:
         engine_args,
         parsed_args.response_role,
         parsed_args.lora_modules,
-        parsed_args.chat_template,
+        parsed_args.chat_template if parsed_args.chat_template is not None and len(parsed_args.chat_template) else None,
     )
 
 
