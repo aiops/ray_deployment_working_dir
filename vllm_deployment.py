@@ -120,29 +120,29 @@ def build_app(cli_args: Dict[str, str]) -> serve.Application:
     logger.info(f"Tensor parallelism = {tp}")
     pg_resources = []
     pg_resources.append({"CPU": 1})  # for the deployment replica
-    cpu_per_actor = int(os.environ["CPU_PER_ACTOR"])
-    gpu_per_actor = int(os.environ["GPU_PER_ACTOR"])
+    cpu_per_actor = int(parsed_args.cpu_per_actor)
+    gpu_per_actor = int(parsed_args.gpu_per_actor)
     for _ in range(tp):
         pg_resources.append({"CPU": cpu_per_actor, "GPU": gpu_per_actor})  # for the vLLM actors
 
     return VLLMDeployment.options(
         placement_group_bundles=pg_resources,
-        placement_group_strategy=os.environ['PLACEMENT_GROUP_STRATEGY']
+        placement_group_strategy=parsed_args.placement_group_strategy
     ).bind(
         engine_args,
         parsed_args.response_role,
         parsed_args.lora_modules,
-        parsed_args.chat_template if parsed_args.chat_template is not None and len(parsed_args.chat_template) else None,
+        parsed_args.chat_template,
     )
 
 # Initialize an empty dictionary
 dynamic_ray_engine_args = {}
 # Iterate over all environment variables
 for key, value in os.environ.items():
-    # Check if the environment variable starts with the prefix "DYNAMIC_RAY_ENGINE_ARG"
-    if key.startswith("DYNAMIC_RAY_ENGINE_ARG"):
+    # Check if the environment variable starts with the prefix "DYNAMIC_RAY_CLI_ARG"
+    if key.startswith("DYNAMIC_RAY_CLI_ARG") and value is not None and len(value):
         # Remove the prefix, convert to lowercase, and replace underscores with hyphens
-        processed_key = key[len("DYNAMIC_RAY_ENGINE_ARG_"):].lower().replace("_", "-")
+        processed_key = key[len("DYNAMIC_RAY_CLI_ARG_"):].lower().replace("_", "-")
         # Add the processed key and its value to the dictionary
         engine_args[processed_key] = value
         
