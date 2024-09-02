@@ -135,9 +135,15 @@ def build_app(cli_args: Dict[str, str]) -> serve.Application:
         parsed_args.chat_template if parsed_args.chat_template is not None and len(parsed_args.chat_template) else None,
     )
 
-
-model = build_app({
-    "model": os.environ['MODEL_ID'],
-    "tensor-parallel-size": os.environ['TENSOR_PARALLELISM'],
-    "chat-template": os.environ.get('TOKENIZER_CHAT_TEMPLATE', None)
-})
+# Initialize an empty dictionary
+dynamic_ray_engine_args = {}
+# Iterate over all environment variables
+for key, value in os.environ.items():
+    # Check if the environment variable starts with the prefix "DYNAMIC_RAY_ENGINE_ARG"
+    if key.startswith("DYNAMIC_RAY_ENGINE_ARG"):
+        # Remove the prefix, convert to lowercase, and replace underscores with hyphens
+        processed_key = key[len("DYNAMIC_RAY_ENGINE_ARG_"):].lower().replace("_", "-")
+        # Add the processed key and its value to the dictionary
+        engine_args[processed_key] = value
+        
+model = build_app(dynamic_ray_engine_args)
