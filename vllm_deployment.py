@@ -1,7 +1,8 @@
 import os
+import urllib
 from typing import Dict, Optional, List
 import logging
-
+import pathlib
 from fastapi import FastAPI
 from starlette.requests import Request
 from starlette.responses import StreamingResponse, JSONResponse
@@ -27,6 +28,26 @@ logger = logging.getLogger("ray.serve")
 
 app = FastAPI()
 
+def download_gguf_file(model_name_or_path: str) -> str:
+    # Only proceed if the URL ends with .gguf
+    if not model_name_or_path.endswith(".gguf"):
+        print("File does not have .gguf suffix, skipping download.")
+        return model_name_or_path  # Return original URL if not a .gguf file
+    # Define download path
+    download_path = pathlib.Path("/tmp/models")
+    download_path.mkdir(parents=True, exist_ok=True)
+    # Extract file name and define full download path
+    file_name = pathlib.Path(model_name_or_path).name
+    file_path = download_path.joinpath(file_name)
+    # Download the file if it doesn't already exist
+    if not file_path.exists():
+        urllib.request.urlretrieve(model_name_or_path, str(file_path))
+        print(f"Downloaded {file_name} to {file_path}")
+    else:
+        print(f"{file_name} already exists at {file_path}")
+    # Return the new file path
+    return str(file_path)
+
 
 @serve.deployment(name="VLLMDeployment")
 @serve.ingress(app)
@@ -45,6 +66,7 @@ class VLLMDeployment:
         self.response_role = response_role
         self.lora_modules = lora_modules
         self.chat_template = chat_template
+        self.engine_args.model = download_gguf_file(self.engine_args.model)
         self.engine = AsyncLLMEngine.from_engine_args(engine_args)
 
     @app.post("/v1/completions")
