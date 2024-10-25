@@ -31,7 +31,7 @@ app = FastAPI()
 def download_gguf_file(model_name_or_path: str) -> str:
     # Only proceed if the URL ends with .gguf
     if not model_name_or_path.endswith(".gguf"):
-        print("File does not have .gguf suffix, skipping download.")
+        logger.info("File does not have .gguf suffix, skipping download.")
         return model_name_or_path  # Return original URL if not a .gguf file
     # Define download path
     download_path = pathlib.Path("/tmp/models")
@@ -42,9 +42,9 @@ def download_gguf_file(model_name_or_path: str) -> str:
     # Download the file if it doesn't already exist
     if not file_path.exists():
         urllib.request.urlretrieve(model_name_or_path, str(file_path))
-        print(f"Downloaded {file_name} to {file_path}")
+        logger.info(f"Downloaded {file_name} to {file_path}")
     else:
-        print(f"{file_name} already exists at {file_path}")
+        logger.info(f"{file_name} already exists at {file_path}")
     # Return the new file path
     return str(file_path)
 
