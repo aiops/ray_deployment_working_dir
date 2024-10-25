@@ -66,7 +66,6 @@ class VLLMDeployment:
         self.response_role = response_role
         self.lora_modules = lora_modules
         self.chat_template = chat_template
-        self.engine_args.model = download_gguf_file(self.engine_args.model)
         self.engine = AsyncLLMEngine.from_engine_args(engine_args)
 
     @app.post("/v1/completions")
@@ -206,5 +205,6 @@ for key, value in os.environ.items():
         processed_key = key[len("DYNAMIC_RAY_CLI_ARG_"):].lower().replace("_", "-")
         # Add the processed key and its value to the dictionary
         dynamic_ray_engine_args[processed_key] = value
-        
+
+dynamic_ray_engine_args["model"] = download_gguf_file(dynamic_ray_engine_args["model"])
 model = build_app(dynamic_ray_engine_args)
