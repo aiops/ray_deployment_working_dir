@@ -44,7 +44,7 @@ def download_gguf_file(model_name_or_path: str) -> str:
     # Download the file if it doesn't already exist
     if not file_path.exists():
         hf_hub_download(repo_id=repo_id, filename=file_name, local_dir=download_path)
-        logger.info(f"Downloaded {file_name} to {file_path}, or retrieved cache version")
+        logger.info(f"Downloaded {file_name} to {file_path}")
     else:
         logger.info(f"{file_name} already exists at {file_path}")
     # Return the new file path
