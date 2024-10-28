@@ -61,14 +61,15 @@ class VLLMDeployment:
             lora_modules: Optional[List[LoRAModulePath]] = None,
             chat_template: Optional[str] = None,
     ):
-        logger.info(f"Starting with engine args: {engine_args}")
         self.openai_serving_chat = None
         self.openai_serving_completion = None
-        self.engine_args = engine_args
         self.response_role = response_role
         self.lora_modules = lora_modules
         self.chat_template = chat_template
+        engine_args.model = download_gguf_file(engine_args.model)
+        logger.info(f"Starting with engine args: {engine_args}")
         self.engine = AsyncLLMEngine.from_engine_args(engine_args)
+        self.engine_args = engine_args
 
     @app.post("/v1/completions")
     async def create_completion(
@@ -208,5 +209,4 @@ for key, value in os.environ.items():
         # Add the processed key and its value to the dictionary
         dynamic_ray_engine_args[processed_key] = value
 
-dynamic_ray_engine_args["model"] = download_gguf_file(dynamic_ray_engine_args["model"])
 model = build_app(dynamic_ray_engine_args)
