@@ -6,6 +6,7 @@ import pathlib
 from fastapi import FastAPI
 from starlette.requests import Request
 from starlette.responses import StreamingResponse, JSONResponse
+from huggingface_hub import hf_hub_download
 
 from ray import serve
 
@@ -38,15 +39,12 @@ def download_gguf_file(model_name_or_path: str) -> str:
     download_path.mkdir(parents=True, exist_ok=True)
     # Extract file name and define full download path
     file_name = pathlib.Path(model_name_or_path).name
-    file_path = download_path.joinpath(file_name)
-    # Download the file if it doesn't already exist
-    if not file_path.exists():
-        urllib.request.urlretrieve(model_name_or_path, str(file_path))
-        logger.info(f"Downloaded {file_name} to {file_path}")
-    else:
-        logger.info(f"{file_name} already exists at {file_path}")
+    repo_id = str(pathlib.Path(model_name_or_path).parent)
+    # Download the file if it doesn't already exist, or return local file
+    local_f_path = hf_hub_download(repo_id=repo_id, filename=file_name, local_dir=download_path, local_files_only=True)
+    logger.info(f"Downloaded {file_name} to {download_path}, or retrieved cache version")
     # Return the new file path
-    return str(file_path)
+    return str(local_f_path)
 
 
 @serve.deployment(name="VLLMDeployment")
