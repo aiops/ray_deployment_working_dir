@@ -70,6 +70,7 @@ class VLLMDeployment:
         self.engine = AsyncLLMEngine.from_engine_args(engine_args)
         self.engine_args = engine_args
 
+    @app.post("/completions")
     @app.post("/v1/completions")
     async def create_completion(
             self, request: CompletionRequest, raw_request: Request
@@ -105,6 +106,7 @@ class VLLMDeployment:
         assert isinstance(generator, CompletionResponse)
         return JSONResponse(content=generator.model_dump())
 
+    @app.post("/chat/completions")
     @app.post("/v1/chat/completions")
     async def create_chat_completion(
             self, request: ChatCompletionRequest, raw_request: Request
