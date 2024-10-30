@@ -21,7 +21,7 @@ from vllm.entrypoints.openai.protocol import (
 )
 from vllm.entrypoints.openai.serving_chat import OpenAIServingChat
 from vllm.entrypoints.openai.serving_completion import OpenAIServingCompletion
-from vllm.entrypoints.openai.serving_engine import LoRAModulePath
+from vllm.entrypoints.openai.serving_engine import BaseModelPath, LoRAModulePath
 from vllm.utils import FlexibleArgumentParser
 
 logger = logging.getLogger("ray.serve")
@@ -49,6 +49,16 @@ def download_gguf_file(model_name_or_path: str) -> str:
     # Return the new file path
     return str(file_path)
 
+def get_base_model_paths(engine_args: AsyncEngineArgs) -> List[BaseModelPath]:
+    if engine_args.served_model_name is not None:
+        served_model_names = engine_args.served_model_name
+    else:
+        served_model_names = [engine_args.model]
+    base_model_paths = [
+        BaseModelPath(name=name, model_path=engine_args.model)
+        for name in served_model_names
+    ]
+    return base_model_paths
 
 @serve.deployment(name="VLLMDeployment")
 @serve.ingress(app)
@@ -83,14 +93,11 @@ class VLLMDeployment:
         if not self.openai_serving_completion:
             model_config = await self.engine.get_model_config()
             # Determine the name of the served model for the OpenAI client.
-            if self.engine_args.served_model_name is not None:
-                served_model_names = self.engine_args.served_model_name
-            else:
-                served_model_names = [self.engine_args.model]
+            base_model_paths = get_base_model_paths(self.engine_args)
             self.openai_serving_completion = OpenAIServingCompletion(
                 self.engine,
                 model_config,
-                served_model_names,
+                base_model_paths,
                 lora_modules=self.lora_modules,
                 prompt_adapters=None,
                 request_logger=None
@@ -119,14 +126,11 @@ class VLLMDeployment:
         if not self.openai_serving_chat:
             model_config = await self.engine.get_model_config()
             # Determine the name of the served model for the OpenAI client.
-            if self.engine_args.served_model_name is not None:
-                served_model_names = self.engine_args.served_model_name
-            else:
-                served_model_names = [self.engine_args.model]
+            base_model_paths = get_base_model_paths(self.engine_args)
             self.openai_serving_chat = OpenAIServingChat(
                 self.engine,
                 model_config,
-                served_model_names,
+                base_model_paths,
                 self.response_role,
                 lora_modules=self.lora_modules,
                 prompt_adapters=None,
