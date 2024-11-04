@@ -1,6 +1,7 @@
+import inspect
 import os
 from functools import wraps
-from typing import Dict, Optional, List
+from typing import Dict, Optional, List, Union
 import logging
 import pathlib
 from fastapi import FastAPI
@@ -35,11 +36,11 @@ original_function = vllm.platforms.cuda.device_id_to_physical_device_id
 def hooked_function(*args, **kwargs):
     @wraps(original_function)
     def device_id_to_physical_device_id_wrapper(*args, **kwargs):
-        print(f"Hook: Executing code before calling "
+        logger.info(f"Hook: Executing code before calling "
                      f"'device_id_to_physical_device_id' (with args={args}, kwargs={kwargs}).")
         os.environ["CUDA_VISIBLE_DEVICES"] = "0,1"
         func_response = original_function(*args, **kwargs)
-        print(f"function 'device_id_to_physical_device_id' response: {func_response}")
+        logger.info(f"function 'device_id_to_physical_device_id' response: {func_response}")
         return func_response
 # Replace the original function with the wrapped version
 vllm.platforms.cuda.device_id_to_physical_device_id = hooked_function
@@ -66,7 +67,17 @@ def download_gguf_file(model_name_or_path: str) -> str:
     # Return the new file path
     return str(file_path)
 
-def get_base_model_paths(engine_args: AsyncEngineArgs) -> List[BaseModelPath]:
+def get_base_model_paths(engine_args: AsyncEngineArgs, target_clazz) -> Union[List[BaseModelPath], List[str]]:
+    def _has_parameter(t_clazz, param_name):
+        # Get the signature of the class's __init__ method
+        init_signature = inspect.signature(t_clazz.__init__)
+        # Check each parameter in the signature
+        for name, param in init_signature.parameters.items():
+            if name == param_name:
+                return True
+        # If the parameter is not found, it's not required
+        return False
+
     if engine_args.served_model_name is not None:
         served_model_names = engine_args.served_model_name
     else:
@@ -75,7 +86,12 @@ def get_base_model_paths(engine_args: AsyncEngineArgs) -> List[BaseModelPath]:
         BaseModelPath(name=name, model_path=engine_args.model)
         for name in served_model_names
     ]
-    return base_model_paths
+    if _has_parameter(target_clazz, "base_model_paths"):
+        return base_model_paths
+    elif _has_parameter(target_clazz, "served_model_names"):
+        return served_model_names
+    else:
+        logger.info("Should not happen!")
 
 @serve.deployment(name="VLLMDeployment")
 @serve.ingress(app)
@@ -110,11 +126,11 @@ class VLLMDeployment:
         if not self.openai_serving_completion:
             model_config = await self.engine.get_model_config()
             # Determine the name of the served model for the OpenAI client.
-            base_model_paths = get_base_model_paths(self.engine_args)
+            base_model_paths_or_served_model_names = get_base_model_paths(self.engine_args, OpenAIServingCompletion)
             self.openai_serving_completion = OpenAIServingCompletion(
                 self.engine,
                 model_config,
-                base_model_paths,
+                base_model_paths_or_served_model_names,
                 lora_modules=self.lora_modules,
                 prompt_adapters=None,
                 request_logger=None
@@ -143,11 +159,11 @@ class VLLMDeployment:
         if not self.openai_serving_chat:
             model_config = await self.engine.get_model_config()
             # Determine the name of the served model for the OpenAI client.
-            base_model_paths = get_base_model_paths(self.engine_args)
+            base_model_paths_or_served_model_names = get_base_model_paths(self.engine_args, OpenAIServingChat)
             self.openai_serving_chat = OpenAIServingChat(
                 self.engine,
                 model_config,
-                base_model_paths,
+                base_model_paths_or_served_model_names,
                 self.response_role,
                 lora_modules=self.lora_modules,
                 prompt_adapters=None,
