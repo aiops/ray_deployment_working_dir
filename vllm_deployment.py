@@ -1,7 +1,7 @@
 import inspect
 import os
 from functools import wraps
-from typing import Dict, Optional, List, Union
+from typing import Dict, Optional, List
 import logging
 import pathlib
 from fastapi import FastAPI
@@ -23,7 +23,7 @@ from vllm.entrypoints.openai.protocol import (
 )
 from vllm.entrypoints.openai.serving_chat import OpenAIServingChat
 from vllm.entrypoints.openai.serving_completion import OpenAIServingCompletion
-from vllm.entrypoints.openai.serving_engine import BaseModelPath, LoRAModulePath
+from vllm.entrypoints.openai.serving_engine import LoRAModulePath
 from vllm.utils import FlexibleArgumentParser
 import vllm.platforms.cuda
 
@@ -67,7 +67,7 @@ def download_gguf_file(model_name_or_path: str) -> str:
     # Return the new file path
     return str(file_path)
 
-def get_base_model_paths(engine_args: AsyncEngineArgs, target_clazz) -> Union[List[BaseModelPath], List[str]]:
+def get_base_model_paths(engine_args: AsyncEngineArgs, target_clazz) -> list:
     def _has_parameter(t_clazz, param_name):
         # Get the signature of the class's __init__ method
         init_signature = inspect.signature(t_clazz.__init__)
@@ -82,11 +82,13 @@ def get_base_model_paths(engine_args: AsyncEngineArgs, target_clazz) -> Union[Li
         served_model_names = engine_args.served_model_name
     else:
         served_model_names = [engine_args.model]
-    base_model_paths = [
-        BaseModelPath(name=name, model_path=engine_args.model)
-        for name in served_model_names
-    ]
+
     if _has_parameter(target_clazz, "base_model_paths"):
+        from vllm.entrypoints.openai.serving_engine import BaseModelPath
+        base_model_paths = [
+            BaseModelPath(name=name, model_path=engine_args.model)
+            for name in served_model_names
+        ]
         return base_model_paths
     elif _has_parameter(target_clazz, "served_model_names"):
         return served_model_names
