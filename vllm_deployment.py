@@ -38,7 +38,7 @@ def hooked_function(*args, **kwargs):
     def device_id_to_physical_device_id_wrapper(*args, **kwargs):
         logger.info(f"Hook: Executing code before calling "
                      f"'device_id_to_physical_device_id' (with args={args}, kwargs={kwargs}).")
-        os.environ["CUDA_VISIBLE_DEVICES"] = "0,1"
+        # os.environ["CUDA_VISIBLE_DEVICES"] = "0,1"
         func_response = original_function(*args, **kwargs)
         logger.info(f"function 'device_id_to_physical_device_id' response: {func_response}")
         return func_response
