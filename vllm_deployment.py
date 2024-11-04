@@ -35,10 +35,12 @@ original_function = vllm.platforms.cuda.device_id_to_physical_device_id
 def hooked_function(*args, **kwargs):
     @wraps(original_function)
     def device_id_to_physical_device_id_wrapper(*args, **kwargs):
-        print("Hook: Executing code before calling device_id_to_physical_device_id.")
-        print(args, kwargs)
+        logging.info(f"Hook: Executing code before calling "
+                     f"'device_id_to_physical_device_id' (with args={args}, kwargs={kwargs}).")
         os.environ["CUDA_VISIBLE_DEVICES"] = "0,1"
-        return original_function(*args, **kwargs)
+        func_response = original_function(*args, **kwargs)
+        logging.info(f"function 'device_id_to_physical_device_id' response: {func_response}")
+        return func_response
 # Replace the original function with the wrapped version
 vllm.platforms.cuda.device_id_to_physical_device_id = hooked_function
 
