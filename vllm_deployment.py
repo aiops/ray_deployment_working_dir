@@ -34,8 +34,9 @@ app = FastAPI()
 original_function = vllm.platforms.cuda.device_id_to_physical_device_id
 def hooked_function(*args, **kwargs):
     @wraps(original_function)
-    def wrapper(*args, **kwargs):
-        print("Hook: Executing code before calling some_function.")
+    def device_id_to_physical_device_id_wrapper(*args, **kwargs):
+        print("Hook: Executing code before calling device_id_to_physical_device_id.")
+        print(args, kwargs)
         os.environ["CUDA_VISIBLE_DEVICES"] = "0,1"
         return original_function(*args, **kwargs)
 # Replace the original function with the wrapped version
