@@ -1,4 +1,5 @@
 import os
+from functools import wraps
 from typing import Dict, Optional, List
 import logging
 import pathlib
@@ -23,10 +24,23 @@ from vllm.entrypoints.openai.serving_chat import OpenAIServingChat
 from vllm.entrypoints.openai.serving_completion import OpenAIServingCompletion
 from vllm.entrypoints.openai.serving_engine import BaseModelPath, LoRAModulePath
 from vllm.utils import FlexibleArgumentParser
+import vllm.platforms.cuda
 
 logger = logging.getLogger("ray.serve")
 
 app = FastAPI()
+
+# Save a reference to the original function
+original_function = vllm.platforms.cuda.device_id_to_physical_device_id
+def hooked_function(*args, **kwargs):
+    @wraps(original_function)
+    def wrapper(*args, **kwargs):
+        print("Hook: Executing code before calling some_function.")
+        os.environ["CUDA_VISIBLE_DEVICES"] = "0,1"
+        return original_function(*args, **kwargs)
+# Replace the original function with the wrapped version
+vllm.platforms.cuda.device_id_to_physical_device_id = hooked_function
+
 
 def download_gguf_file(model_name_or_path: str) -> str:
     # Only proceed if the URL ends with .gguf
