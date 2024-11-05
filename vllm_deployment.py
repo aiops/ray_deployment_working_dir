@@ -1,6 +1,5 @@
 import inspect
 import os
-# from functools import wraps
 from typing import Dict, Optional, List
 import logging
 import pathlib
@@ -25,26 +24,35 @@ from vllm.entrypoints.openai.serving_chat import OpenAIServingChat
 from vllm.entrypoints.openai.serving_completion import OpenAIServingCompletion
 from vllm.entrypoints.openai.serving_engine import LoRAModulePath
 from vllm.utils import FlexibleArgumentParser
-# import vllm.platforms.cuda
+import vllm.platforms.cuda
 
 logger = logging.getLogger("ray.serve")
 
 app = FastAPI()
 
+# vLLM has some issues in certain versions, which is why we introduce some additional logic
+# https://github.com/vllm-project/vllm/issues/7890
+# https://github.com/vllm-project/vllm/issues/8402
+# Goal: If possible not invasive, non-blocking
 # Save a reference to the original function
-# original_function = vllm.platforms.cuda.device_id_to_physical_device_id
-# def hooked_function(*args, **kwargs):
-#     @wraps(original_function)
-#     def device_id_to_physical_device_id_wrapper(*args, **kwargs):
-#         logger.info(f"Hook: Executing code before calling "
-#                      f"'device_id_to_physical_device_id' (with args={args}, kwargs={kwargs}).")
-#         # os.environ["CUDA_VISIBLE_DEVICES"] = "0,1"
-#         func_response = original_function(*args, **kwargs)
-#         logger.info(f"function 'device_id_to_physical_device_id' response: {func_response}")
-#         return func_response
-# # Replace the original function with the wrapped version
-# vllm.platforms.cuda.device_id_to_physical_device_id = hooked_function
-
+original_function = vllm.platforms.cuda.device_id_to_physical_device_id
+def device_id_to_physical_device_id_wrapper(*args, **kwargs):
+    logger.info(f"Hook: Executing code before calling "
+                    f"'device_id_to_physical_device_id' (with args={args}, kwargs={kwargs}).")
+    if not len(os.environ["CUDA_VISIBLE_DEVICES"]):
+        try:
+            import nvsmi
+            gpu_count: int = len(list(nvsmi.get_gpus()))
+            new_env_value: str = ",".join([str(n) for n in range(gpu_count)])
+            os.environ["CUDA_VISIBLE_DEVICES"] = new_env_value
+            logger.info(f"New value for environment variable 'CUDA_VISIBLE_DEVICES': {new_env_value}")
+        except BaseException as e:
+            logger.error(f"Could not derive gpu_count using 'nvsmi' library. Error: {e}")
+    func_response = original_function(*args, **kwargs)
+    logger.info(f"function 'device_id_to_physical_device_id' response: {func_response}")
+    return func_response
+# Replace the original function with the wrapped version
+vllm.platforms.cuda.device_id_to_physical_device_id = device_id_to_physical_device_id_wrapper
 
 def download_gguf_file(model_name_or_path: str) -> str:
     # Only proceed if the URL ends with .gguf
