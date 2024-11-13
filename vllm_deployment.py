@@ -236,16 +236,23 @@ def build_app(cli_args: Dict[str, str]) -> serve.Application:
     for _ in range(tp):
         pg_resources.append({"CPU": cpu_per_actor, "GPU": gpu_per_actor})  # for the vLLM actors
 
-    # Ray uses <1> as default value, because <None> is a legit new value
-    return VLLMDeployment.options(
-        placement_group_bundles=pg_resources if tp > 1 else 1,
-        placement_group_strategy=os.environ.get('BUILD_APP_ARG_PLACEMENT_GROUP_STRATEGY', 1)
-    ).bind(
-        engine_args,
-        parsed_args.response_role,
-        parsed_args.lora_modules,
-        parsed_args.chat_template,
-    )
+    if tp > 1:
+        return VLLMDeployment.options(
+            placement_group_bundles=pg_resources,
+            placement_group_strategy=os.environ.get('BUILD_APP_ARG_PLACEMENT_GROUP_STRATEGY', "PACK")
+        ).bind(
+            engine_args,
+            parsed_args.response_role,
+            parsed_args.lora_modules,
+            parsed_args.chat_template,
+        )
+    else:
+        return VLLMDeployment.bind(
+            engine_args,
+            parsed_args.response_role,
+            parsed_args.lora_modules,
+            parsed_args.chat_template,
+        )
 
 # Initialize an empty dictionary
 dynamic_ray_engine_args = {}
