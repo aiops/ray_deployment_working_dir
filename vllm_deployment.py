@@ -39,6 +39,7 @@ original_function = vllm.platforms.cuda.device_id_to_physical_device_id
 def device_id_to_physical_device_id_wrapper(*args, **kwargs):
     logger.info(f"Hook: Executing code before calling "
                     f"'device_id_to_physical_device_id' (with args={args}, kwargs={kwargs}).")
+    logger.info(f"Current value for environment variable 'CUDA_VISIBLE_DEVICES': {os.environ['CUDA_VISIBLE_DEVICES']}")
     if not len(os.environ["CUDA_VISIBLE_DEVICES"]):
         try:
             import nvsmi
