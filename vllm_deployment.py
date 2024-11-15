@@ -1,6 +1,6 @@
 import inspect
 import os
-from typing import Dict, Optional, List
+from typing import Dict, Optional, List, Union
 import logging
 import pathlib
 from fastapi import FastAPI
@@ -77,6 +77,16 @@ def download_gguf_file(model_name_or_path: str) -> str:
     # Return the new file path
     return str(file_path)
 
+def get_served_model_names(engine_args: AsyncEngineArgs) -> List[str]:
+    if engine_args.served_model_name is not None:
+        served_model_names: Union[str, List[str]] = engine_args.served_model_name
+        # Because the typing suggests it could be a string or list of strings
+        if isinstance(served_model_names, str):
+            served_model_names: List[str] = [served_model_names]
+    else:
+        served_model_names: List[str] = [engine_args.model]
+    return served_model_names
+
 def get_base_model_paths(engine_args: AsyncEngineArgs, target_clazz) -> list:
     def _has_parameter(t_clazz, param_name):
         # Get the signature of the class's __init__ method
@@ -88,10 +98,7 @@ def get_base_model_paths(engine_args: AsyncEngineArgs, target_clazz) -> list:
         # If the parameter is not found, it's not required
         return False
 
-    if engine_args.served_model_name is not None:
-        served_model_names = engine_args.served_model_name
-    else:
-        served_model_names = [engine_args.model]
+    served_model_names: List[str] = get_served_model_names(engine_args)
 
     if _has_parameter(target_clazz, "base_model_paths"):
         from vllm.entrypoints.openai.serving_engine import BaseModelPath
@@ -124,9 +131,10 @@ class VLLMDeployment:
         logger.info(f"Starting with engine args: {engine_args}")
         self.engine = AsyncLLMEngine.from_engine_args(engine_args)
         self.engine_args = engine_args
+        served_model_names: List[str] = get_served_model_names(self.engine_args)
         additional_metrics_logger: RayPrometheusStatLogger = RayPrometheusStatLogger(
             local_interval=0.5,
-            labels=dict(model_name=self.engine_args.served_model_name),
+            labels=dict(model_name=served_model_names[0]),
             max_model_len=self.engine_args.max_model_len
         )
         self.engine.add_logger("ray", additional_metrics_logger)
