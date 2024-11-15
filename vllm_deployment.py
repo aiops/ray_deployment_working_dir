@@ -12,6 +12,7 @@ from ray import serve
 
 from vllm.engine.arg_utils import AsyncEngineArgs
 from vllm.engine.async_llm_engine import AsyncLLMEngine
+from vllm.engine.metrics import RayPrometheusStatLogger
 from vllm.entrypoints.openai.cli_args import make_arg_parser
 from vllm.entrypoints.openai.protocol import (
     ChatCompletionRequest,
@@ -123,6 +124,12 @@ class VLLMDeployment:
         logger.info(f"Starting with engine args: {engine_args}")
         self.engine = AsyncLLMEngine.from_engine_args(engine_args)
         self.engine_args = engine_args
+        additional_metrics_logger: RayPrometheusStatLogger = RayPrometheusStatLogger(
+            local_interval=0.5,
+            labels=dict(model_name=self.engine_args.served_model_name),
+            max_model_len=self.engine_args.max_model_len
+        )
+        self.engine.add_logger("ray", additional_metrics_logger)
 
     @app.post("/completions")
     @app.post("/v1/completions")
