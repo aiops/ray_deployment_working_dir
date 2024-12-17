@@ -9,6 +9,7 @@ from starlette.responses import StreamingResponse, JSONResponse
 from huggingface_hub import hf_hub_download
 
 from ray import serve
+from vllm.config import ModelConfig
 
 from vllm.engine.arg_utils import AsyncEngineArgs
 from vllm.engine.async_llm_engine import AsyncLLMEngine
@@ -106,11 +107,13 @@ class VLLMDeployment:
         logger.info(f"Starting with engine args: {engine_args}")
         self.engine = AsyncLLMEngine.from_engine_args(engine_args)
         self.engine_args = engine_args
+        # Configure custom logger so that vllm metrics are also exposed
+        model_config: ModelConfig = self.engine.engine.model_config
         served_model_names: List[str] = get_served_model_names(self.engine_args)
         additional_metrics_logger: RayPrometheusStatLogger = RayPrometheusStatLogger(
             local_interval=0.5,
             labels=dict(model_name=served_model_names[0]),
-            max_model_len=self.engine_args.max_model_len
+            max_model_len=model_config.max_model_len
         )
         self.engine.add_logger("ray", additional_metrics_logger)
 
