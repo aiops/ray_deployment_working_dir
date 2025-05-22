@@ -10,6 +10,7 @@ from huggingface_hub import hf_hub_download
 from ray import serve
 from vllm.config import VllmConfig
 
+from vllm.usage.usage_lib import UsageContext
 from vllm.engine.arg_utils import AsyncEngineArgs
 from vllm.engine.async_llm_engine import AsyncLLMEngine
 from vllm.engine.metrics import RayPrometheusStatLogger
@@ -83,7 +84,7 @@ class VLLMDeployment:
         logger.info(f"Starting with engine args: {engine_args}")
         self.engine = AsyncLLMEngine.from_engine_args(engine_args)
         self.engine_args = engine_args
-        self.vllm_config: VllmConfig = self.engine.vllm_config
+        self.vllm_config: VllmConfig = self.engine_args.create_engine_config(UsageContext.ENGINE_CONTEXT)
         # Configure custom logger so that vllm metrics are also exposed
         served_model_names: List[str] = get_served_model_names(self.engine_args)
         additional_metrics_logger: RayPrometheusStatLogger = RayPrometheusStatLogger(
