@@ -1,6 +1,5 @@
-import inspect
 import os
-from typing import Dict, Optional, List, Union
+from typing import Dict, Optional, List, Union, Literal
 import logging
 import pathlib
 from fastapi import FastAPI
@@ -9,12 +8,13 @@ from starlette.responses import StreamingResponse, JSONResponse
 from huggingface_hub import hf_hub_download
 
 from ray import serve
-from vllm.config import ModelConfig
+from vllm.config import VllmConfig
 
 from vllm.engine.arg_utils import AsyncEngineArgs
 from vllm.engine.async_llm_engine import AsyncLLMEngine
 from vllm.engine.metrics import RayPrometheusStatLogger
 from vllm.entrypoints.openai.cli_args import make_arg_parser
+from vllm.entrypoints.openai.serving_models import OpenAIServingModels, BaseModelPath, LoRAModulePath
 from vllm.entrypoints.openai.protocol import (
     ChatCompletionRequest,
     ChatCompletionResponse,
@@ -24,7 +24,6 @@ from vllm.entrypoints.openai.protocol import (
 )
 from vllm.entrypoints.openai.serving_chat import OpenAIServingChat
 from vllm.entrypoints.openai.serving_completion import OpenAIServingCompletion
-from vllm.entrypoints.openai.serving_engine import LoRAModulePath
 from vllm.utils import FlexibleArgumentParser
 
 logger = logging.getLogger("ray.serve")
@@ -62,31 +61,6 @@ def get_served_model_names(engine_args: AsyncEngineArgs) -> List[str]:
         served_model_names: List[str] = [engine_args.model]
     return served_model_names
 
-def get_base_model_paths(engine_args: AsyncEngineArgs, target_clazz) -> list:
-    def _has_parameter(t_clazz, param_name):
-        # Get the signature of the class's __init__ method
-        init_signature = inspect.signature(t_clazz.__init__)
-        # Check each parameter in the signature
-        for name, param in init_signature.parameters.items():
-            if name == param_name:
-                return True
-        # If the parameter is not found, it's not required
-        return False
-
-    served_model_names: List[str] = get_served_model_names(engine_args)
-
-    if _has_parameter(target_clazz, "base_model_paths"):
-        from vllm.entrypoints.openai.serving_engine import BaseModelPath
-        base_model_paths = [
-            BaseModelPath(name=name, model_path=engine_args.model)
-            for name in served_model_names
-        ]
-        return base_model_paths
-    elif _has_parameter(target_clazz, "served_model_names"):
-        return served_model_names
-    else:
-        logger.info("Should not happen!")
-
 @serve.deployment(name="VLLMDeployment")
 @serve.ingress(app)
 class VLLMDeployment:
@@ -96,26 +70,42 @@ class VLLMDeployment:
             response_role: str,
             lora_modules: Optional[List[LoRAModulePath]] = None,
             chat_template: Optional[str] = None,
+            chat_template_content_format: Literal["auto", "string", "openai"] = "auto",
     ):
         self.openai_serving_chat = None
         self.openai_serving_completion = None
         self.response_role = response_role
         self.lora_modules = lora_modules
         self.chat_template = chat_template
+        self.chat_template_content_format = chat_template_content_format
         engine_args.model = download_gguf_file(engine_args.model)
         os.environ.pop("CUDA_VISIBLE_DEVICES", None)
         logger.info(f"Starting with engine args: {engine_args}")
         self.engine = AsyncLLMEngine.from_engine_args(engine_args)
         self.engine_args = engine_args
+        self.vllm_config: VllmConfig = self.engine.vllm_config
         # Configure custom logger so that vllm metrics are also exposed
-        model_config: ModelConfig = self.engine.engine.model_config
         served_model_names: List[str] = get_served_model_names(self.engine_args)
         additional_metrics_logger: RayPrometheusStatLogger = RayPrometheusStatLogger(
             local_interval=0.5,
             labels=dict(model_name=served_model_names[0]),
-            max_model_len=model_config.max_model_len
+            vllm_config=self.vllm_config
         )
         self.engine.add_logger("ray", additional_metrics_logger)
+
+    def get_serving_models(self) -> OpenAIServingModels:
+        served_model_names: List[str] = get_served_model_names(self.engine_args)
+        base_model_paths = [
+            BaseModelPath(name=name, model_path=self.engine_args.model)
+            for name in served_model_names
+        ]
+        return OpenAIServingModels(
+            self.engine,
+            self.vllm_config.model_config,
+            base_model_paths,
+            lora_modules=self.lora_modules,
+            prompt_adapters=None
+        )
 
     @app.post("/completions")
     @app.post("/v1/completions")
@@ -129,14 +119,11 @@ class VLLMDeployment:
         """
         if not self.openai_serving_completion:
             model_config = await self.engine.get_model_config()
-            # Determine the name of the served model for the OpenAI client.
-            base_model_paths_or_served_model_names = get_base_model_paths(self.engine_args, OpenAIServingCompletion)
+            serving_models: OpenAIServingModels = self.get_serving_models()
             self.openai_serving_completion = OpenAIServingCompletion(
                 self.engine,
                 model_config,
-                base_model_paths_or_served_model_names,
-                lora_modules=self.lora_modules,
-                prompt_adapters=None,
+                serving_models,
                 request_logger=None
             )
         logger.info(f"Request: {request}")
@@ -162,17 +149,15 @@ class VLLMDeployment:
         """
         if not self.openai_serving_chat:
             model_config = await self.engine.get_model_config()
-            # Determine the name of the served model for the OpenAI client.
-            base_model_paths_or_served_model_names = get_base_model_paths(self.engine_args, OpenAIServingChat)
+            serving_models: OpenAIServingModels = self.get_serving_models()
             self.openai_serving_chat = OpenAIServingChat(
                 self.engine,
                 model_config,
-                base_model_paths_or_served_model_names,
+                serving_models,
                 self.response_role,
-                lora_modules=self.lora_modules,
-                prompt_adapters=None,
                 request_logger=None,
                 chat_template=self.chat_template,
+                chat_template_content_format=self.chat_template_content_format
             )
         logger.info(f"Request: {request}")
         generator = await self.openai_serving_chat.create_chat_completion(
@@ -201,9 +186,9 @@ def parse_vllm_args(cli_args: Dict[str, str]):
     
     parser = make_arg_parser(arg_parser)
     arg_strings = []
-    for key, value in cli_args.items():
-        if value is not None:
-            arg_strings.extend([f"--{key}", str(value)])
+    for k, v in cli_args.items():
+        if v is not None:
+            arg_strings.extend([f"--{k}", str(v)])
     logger.info(arg_strings)
     parsed_args = parser.parse_args(args=arg_strings)
     return parsed_args
@@ -223,8 +208,7 @@ def build_app(cli_args: Dict[str, str]) -> serve.Application:
 
     tp = engine_args.tensor_parallel_size
     logger.info(f"Tensor parallelism = {tp}")
-    pg_resources = []
-    pg_resources.append({"CPU": 1})  # for the deployment replica
+    pg_resources = [{"CPU": 1}]
     cpu_per_actor = int(os.environ["BUILD_APP_ARG_CPU_PER_ACTOR"])
     gpu_per_actor = int(os.environ["BUILD_APP_ARG_GPU_PER_ACTOR"])
     for _ in range(tp):
@@ -239,6 +223,7 @@ def build_app(cli_args: Dict[str, str]) -> serve.Application:
             parsed_args.response_role,
             parsed_args.lora_modules,
             parsed_args.chat_template,
+            parsed_args.chat_template_content_format
         )
     else:
         return VLLMDeployment.bind(
@@ -246,6 +231,7 @@ def build_app(cli_args: Dict[str, str]) -> serve.Application:
             parsed_args.response_role,
             parsed_args.lora_modules,
             parsed_args.chat_template,
+            parsed_args.chat_template_content_format
         )
 
 # Initialize an empty dictionary
